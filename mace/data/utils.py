@@ -37,6 +37,8 @@ class Configuration:
     virials: Optional[Virials] = None  # eV
     dipole: Optional[Vector] = None  # Debye
     charges: Optional[Charges] = None  # atomic unit
+    total_charge: Optional[int] = None # molecular charge
+    spin: Optional[int] = None # molecular spin
     cell: Optional[Cell] = None
     pbc: Optional[Pbc] = None
 
@@ -77,6 +79,8 @@ def config_from_atoms_list(
     virials_key="virials",
     dipole_key="dipole",
     charges_key="charges",
+    total_charge_key="charge",
+    spin_key="spin",
     config_type_weights: Dict[str, float] = None,
 ) -> Configurations:
     """Convert list of ase.Atoms into Configurations"""
@@ -85,6 +89,8 @@ def config_from_atoms_list(
 
     all_configs = []
     for atoms in atoms_list:
+        print("DEBUG")
+        print(atoms.arrays)
         all_configs.append(
             config_from_atoms(
                 atoms,
@@ -94,6 +100,8 @@ def config_from_atoms_list(
                 virials_key=virials_key,
                 dipole_key=dipole_key,
                 charges_key=charges_key,
+                total_charge_key=total_charge_key,
+                spin_key=spin_key,
                 config_type_weights=config_type_weights,
             )
         )
@@ -108,6 +116,8 @@ def config_from_atoms(
     virials_key="virials",
     dipole_key="dipole",
     charges_key="charges",
+    total_charge_key="charge",
+    spin_key="spin",
     config_type_weights: Dict[str, float] = None,
 ) -> Configuration:
     """Convert ase.Atoms to Configuration"""
@@ -116,11 +126,16 @@ def config_from_atoms(
 
     energy = atoms.info.get(energy_key, None)  # eV
     forces = atoms.arrays.get(forces_key, None)  # eV / Ang
+    print("DEBUGGING")
+    print(forces.shape)
+    print(forces)
     stress = atoms.info.get(stress_key, None)  # eV / Ang
     virials = atoms.info.get(virials_key, None)
     dipole = atoms.info.get(dipole_key, None)  # Debye
     # Charges default to 0 instead of None if not found
     charges = atoms.arrays.get(charges_key, np.zeros(len(atoms)))  # atomic unit
+    total_charge = atoms.info.get(total_charge_key, 0)
+    spin = atoms.info.get(spin_key, 0)
     atomic_numbers = np.array(
         [ase.data.atomic_numbers[symbol] for symbol in atoms.symbols]
     )
@@ -158,6 +173,8 @@ def config_from_atoms(
         virials=virials,
         dipole=dipole,
         charges=charges,
+        total_charge=total_charge,
+        spin=spin,
         weight=weight,
         energy_weight=energy_weight,
         forces_weight=forces_weight,
@@ -194,9 +211,13 @@ def load_from_xyz(
     virials_key: str = "virials",
     dipole_key: str = "dipole",
     charges_key: str = "charges",
+    total_charge_key: str = "charge",
+    spin_key: str = "spin",
     extract_atomic_energies: bool = False,
 ) -> Tuple[Dict[int, float], Configurations]:
     atoms_list = ase.io.read(file_path, index=":")
+    print("DEBUGGGINGGGG")
+    print(atoms_list[0].arrays)
 
     if not isinstance(atoms_list, list):
         atoms_list = [atoms_list]
@@ -233,6 +254,8 @@ def load_from_xyz(
         virials_key=virials_key,
         dipole_key=dipole_key,
         charges_key=charges_key,
+        total_charge_key=total_charge_key,
+        spin_key=spin_key,
     )
     return atomic_energies_dict, configs
 

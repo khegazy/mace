@@ -60,6 +60,8 @@ def main() -> None:
         virials_key=args.virials_key,
         dipole_key=args.dipole_key,
         charges_key=args.charges_key,
+        total_charge_key=args.total_charge_key,
+        spin_key=args.spin_key,
     )
 
     logging.info(
@@ -75,8 +77,21 @@ def main() -> None:
         for config in configs
         for z in config.atomic_numbers
     )
+    total_charge_table = tools.get_total_charge_table_from_charges(
+        config.total_charge
+        for configs in (collections.train, collections.valid)
+        for config in configs
+    )
+    spin_table = tools.get_spin_table_from_spins(
+        config.spin
+        for configs in (collections.train, collections.valid)
+        for config in configs
+    )
+
     # yapf: enable
     logging.info(z_table)
+    logging.info(total_charge_table)
+    logging.info(spin_table)
     if args.model == "AtomicDipolesMACE":
         atomic_energies = None
         dipole_only = True
@@ -127,7 +142,13 @@ def main() -> None:
 
     train_loader = torch_geometric.dataloader.DataLoader(
         dataset=[
-            data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+            data.AtomicData.from_config(
+                config,
+                z_table=z_table,
+                total_charge_table=total_charge_table,
+                spin_table=spin_table,
+                cutoff=args.r_max
+            )
             for config in collections.train
         ],
         batch_size=args.batch_size,
@@ -136,7 +157,13 @@ def main() -> None:
     )
     valid_loader = torch_geometric.dataloader.DataLoader(
         dataset=[
-            data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+            data.AtomicData.from_config(
+                config,
+                z_table=z_table,
+                total_charge_table=total_charge_table,
+                spin_table=spin_table,
+                cutoff=args.r_max
+            )
             for config in collections.valid
         ],
         batch_size=args.valid_batch_size,
@@ -226,6 +253,8 @@ def main() -> None:
         interaction_cls=modules.interaction_classes[args.interaction],
         num_interactions=args.num_interactions,
         num_elements=len(z_table),
+        num_total_charges=len(total_charge_table),
+        num_spins=len(spin_table),
         hidden_irreps=o3.Irreps(args.hidden_irreps),
         atomic_energies=atomic_energies,
         avg_num_neighbors=args.avg_num_neighbors,
@@ -525,6 +554,8 @@ def main() -> None:
             table_type=args.error_table,
             all_collections=all_collections,
             z_table=z_table,
+            total_charge_table=total_charge_table,
+            spin_table=spin_table,
             r_max=args.r_max,
             valid_batch_size=args.valid_batch_size,
             model=model,
