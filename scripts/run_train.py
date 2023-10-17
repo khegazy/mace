@@ -246,6 +246,8 @@ def main() -> None:
             args.hidden_irreps += f" + {args.num_channels:d}x3o"
     logging.info(f"Hidden irreps: {args.hidden_irreps}")
     model_config = dict(
+        spin_charge_embeddings=args.spin_charge_embeddings,
+        spin_charge_multitask=args.spin_charge_multitask,
         r_max=args.r_max,
         num_bessel=args.num_radial_basis,
         num_polynomial_cutoff=args.num_cutoff_basis,
