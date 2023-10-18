@@ -11,6 +11,10 @@ import torch.utils.data
 from mace.tools import (
     AtomicNumberTable,
     atomic_numbers_to_indices,
+    TotalChargeTable,
+    total_charges_to_indices,
+    SpinTable,
+    spins_to_indices,
     to_one_hot,
     torch_geometric,
     voigt_to_matrix,
@@ -25,6 +29,7 @@ class AtomicData(torch_geometric.data.Data):
     batch: torch.Tensor
     edge_index: torch.Tensor
     node_attrs: torch.Tensor
+    global_attrs: torch.Tensor
     edge_vectors: torch.Tensor
     edge_lengths: torch.Tensor
     positions: torch.Tensor
@@ -47,6 +52,7 @@ class AtomicData(torch_geometric.data.Data):
         self,
         edge_index: torch.Tensor,  # [2, n_edges]
         node_attrs: torch.Tensor,  # [n_nodes, n_node_feats]
+        global_attrs: torch.Tensor,  # [n_total_charges, n_spins]
         positions: torch.Tensor,  # [n_nodes, 3]
         shifts: torch.Tensor,  # [n_edges, 3],
         unit_shifts: torch.Tensor,  # [n_edges, 3]
@@ -71,6 +77,7 @@ class AtomicData(torch_geometric.data.Data):
         assert shifts.shape[1] == 3
         assert unit_shifts.shape[1] == 3
         assert len(node_attrs.shape) == 2
+        assert len(global_attrs.shape) == 3
         assert weight is None or len(weight.shape) == 0
         assert energy_weight is None or len(energy_weight.shape) == 0
         assert forces_weight is None or len(forces_weight.shape) == 0
@@ -92,6 +99,7 @@ class AtomicData(torch_geometric.data.Data):
             "unit_shifts": unit_shifts,
             "cell": cell,
             "node_attrs": node_attrs,
+            "global_attrs": global_attrs,
             "weight": weight,
             "energy_weight": energy_weight,
             "forces_weight": forces_weight,
@@ -108,16 +116,32 @@ class AtomicData(torch_geometric.data.Data):
 
     @classmethod
     def from_config(
-        cls, config: Configuration, z_table: AtomicNumberTable, cutoff: float
+        cls, config: Configuration,
+        z_table: AtomicNumberTable,
+        total_charge_table: TotalChargeTable,
+        spin_table: SpinTable,
+        cutoff: float,
     ) -> "AtomicData":
         edge_index, shifts, unit_shifts = get_neighborhood(
             positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
         )
-        indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
-        one_hot = to_one_hot(
-            torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
+        indices_z = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
+        one_hot_z = to_one_hot(
+            torch.tensor(indices_z, dtype=torch.long).unsqueeze(-1),
             num_classes=len(z_table),
         )
+        indices_total_charge = total_charges_to_indices(config.total_charge, total_charge_table=total_charge_table)
+        one_hot_total_charge = to_one_hot(
+            torch.tensor(indices_total_charge, dtype=torch.long).unsqueeze(-1),
+            num_classes=len(total_charge_table),
+        )
+        indices_spin = spins_to_indices(config.spin, spin_table=spin_table)
+        one_hot_spin = to_one_hot(
+            torch.tensor(indices_spin, dtype=torch.long).unsqueeze(-1),
+            num_classes=len(spin_table),
+        )
+        one_hot_global = one_hot_total_charge.unsqueeze(-1)*one_hot_spin.unsqueeze(0)
+        one_hot_global = one_hot_global.unsqueeze(0)
 
         cell = (
             torch.tensor(config.cell, dtype=torch.get_default_dtype())
@@ -196,7 +220,8 @@ class AtomicData(torch_geometric.data.Data):
             shifts=torch.tensor(shifts, dtype=torch.get_default_dtype()),
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
-            node_attrs=one_hot,
+            node_attrs=one_hot_z,
+            global_attrs=one_hot_global,
             weight=weight,
             energy_weight=energy_weight,
             forces_weight=forces_weight,
