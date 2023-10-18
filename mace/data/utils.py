@@ -89,8 +89,6 @@ def config_from_atoms_list(
 
     all_configs = []
     for atoms in atoms_list:
-        print("DEBUG")
-        print(atoms.arrays)
         all_configs.append(
             config_from_atoms(
                 atoms,
@@ -126,9 +124,6 @@ def config_from_atoms(
 
     energy = atoms.info.get(energy_key, None)  # eV
     forces = atoms.arrays.get(forces_key, None)  # eV / Ang
-    print("DEBUGGING")
-    print(forces.shape)
-    print(forces)
     stress = atoms.info.get(stress_key, None)  # eV / Ang
     virials = atoms.info.get(virials_key, None)
     dipole = atoms.info.get(dipole_key, None)  # Debye
@@ -216,8 +211,6 @@ def load_from_xyz(
     extract_atomic_energies: bool = False,
 ) -> Tuple[Dict[int, float], Configurations]:
     atoms_list = ase.io.read(file_path, index=":")
-    print("DEBUGGGINGGGG")
-    print(atoms_list[0].arrays)
 
     if not isinstance(atoms_list, list):
         atoms_list = [atoms_list]
