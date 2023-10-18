@@ -238,9 +238,6 @@ def take_step(
     batch = batch.to(device)
     optimizer.zero_grad(set_to_none=True)
     batch_dict = batch.to_dict()
-    print("DEBUGINGGGGGG")
-    print(batch_dict.keys())
-    print(batch_dict["forces"])
     output = model(
         batch_dict,
         training=True,
