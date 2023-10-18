@@ -106,6 +106,67 @@ def atomic_numbers_to_indices(
     return to_index_fn(atomic_numbers)
 
 
+class TotalChargeTable:
+    def __init__(self, charges: Sequence[int]):
+        self.charges = charges
+
+    def __len__(self) -> int:
+        return len(self.charges)
+
+    def __str__(self):
+        return f"TotalChargeTable: {tuple(s for s in self.charges)}"
+
+    def index_to_charge(self, index: int) -> int:
+        return self.charges[index]
+
+    def charge_to_index(self, total_charge: str) -> int:
+        return self.charges.index(total_charge)
+
+
+def get_total_charge_table_from_charges(total_charges: Iterable[int]) -> TotalChargeTable:
+    total_charge_set = set()
+    for c in total_charges:
+        total_charge_set.add(c)
+    return TotalChargeTable(sorted(list(total_charge_set)))
+
+
+def total_charges_to_indices(
+    total_charges: np.ndarray, total_charge_table: TotalChargeTable
+) -> np.ndarray:
+    to_index_fn = np.vectorize(total_charge_table.charge_to_index)
+    return to_index_fn(total_charges)
+
+
+class SpinTable:
+    def __init__(self, spins: Sequence[int]):
+        self.spins = spins
+
+    def __len__(self) -> int:
+        return len(self.spins)
+
+    def __str__(self):
+        return f"SpinTable: {tuple(s for s in self.spins)}"
+
+    def index_to_spin(self, index: int) -> int:
+        return self.spins[index]
+
+    def spin_to_index(self, spin: str) -> int:
+        return self.spins.index(spin)
+
+
+def get_spin_table_from_spins(spins: Iterable[int]) -> SpinTable:
+    spin_set = set()
+    for s in spins:
+        spin_set.add(s)
+    return SpinTable(sorted(list(spin_set)))
+
+
+def spins_to_indices(
+    spins: np.ndarray, spin_table: SpinTable
+) -> np.ndarray:
+    to_index_fn = np.vectorize(spin_table.spin_to_index)
+    return to_index_fn(spins)
+
 def get_optimizer(
     name: str,
     amsgrad: bool,

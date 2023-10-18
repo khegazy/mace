@@ -16,8 +16,7 @@ from prettytable import PrettyTable
 
 from mace import data, modules
 from mace.data import AtomicData
-from mace.tools import AtomicNumberTable, evaluate, torch_geometric
-
+from mace.tools import AtomicNumberTable, TotalChargeTable, SpinTable, evaluate, torch_geometric
 
 @dataclasses.dataclass
 class SubsetCollection:
@@ -39,6 +38,8 @@ def get_dataset_from_xyz(
     virials_key: str = "virials",
     dipole_key: str = "dipoles",
     charges_key: str = "charges",
+    total_charge_key: str = "charge",
+    spin_key: str = "spin",
 ) -> Tuple[SubsetCollection, Optional[Dict[int, float]]]:
     """Load training and test dataset from xyz file"""
     atomic_energies_dict, all_train_configs = data.load_from_xyz(
@@ -50,6 +51,8 @@ def get_dataset_from_xyz(
         virials_key=virials_key,
         dipole_key=dipole_key,
         charges_key=charges_key,
+        total_charge_key=total_charge_key,
+        spin_key=spin_key,
         extract_atomic_energies=True,
     )
     logging.info(
@@ -65,6 +68,8 @@ def get_dataset_from_xyz(
             virials_key=virials_key,
             dipole_key=dipole_key,
             charges_key=charges_key,
+            total_charge_key=total_charge_key,
+            spin_key=spin_key,
             extract_atomic_energies=False,
         )
         logging.info(
@@ -88,6 +93,8 @@ def get_dataset_from_xyz(
             forces_key=forces_key,
             dipole_key=dipole_key,
             charges_key=charges_key,
+            total_charge_key=total_charge_key,
+            spin_key=spin_key,
             extract_atomic_energies=False,
         )
         # create list of tuples (config_type, list(Atoms))

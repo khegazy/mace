@@ -47,6 +47,8 @@ class MACE(torch.nn.Module):
         interaction_cls_first: Type[InteractionBlock],
         num_interactions: int,
         num_elements: int,
+        num_total_charges: int,
+        num_spins: int,
         hidden_irreps: o3.Irreps,
         MLP_irreps: o3.Irreps,
         atomic_energies: np.ndarray,
