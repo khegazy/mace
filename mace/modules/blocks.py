@@ -25,43 +25,128 @@ from .symmetric_contraction import SymmetricContraction
 
 @compile_mode("script")
 class LinearNodeEmbeddingBlock(torch.nn.Module):
-    def __init__(self, irreps_in: o3.Irreps, irreps_out: o3.Irreps):
+    def __init__(
+        self,
+        irreps_in: o3.Irreps,
+        irreps_out: o3.Irreps,
+        do_spin_charge: bool = False,
+    ):
         super().__init__()
+        self.do_spin_charge = do_spin_charge
         self.linear = o3.Linear(irreps_in=irreps_in, irreps_out=irreps_out)
 
     def forward(
         self,
+        batch : torch.Tensor,
         node_attrs: torch.Tensor,
+        global_attrs: torch.Tensor,
     ) -> torch.Tensor:  # [n_nodes, irreps]
-        return self.linear(node_attrs)
+        one_hot = node_attrs
+        if self.do_spin_charge:
+            one_hot = one_hot.unsqueeze(-1).unsqueeze(-1)\
+                *global_attrs.unsqueeze(1)[batch]
+        return self.linear(torch.flatten(one_hot, start_dim=1))
 
 
 @compile_mode("script")
 class LinearReadoutBlock(torch.nn.Module):
-    def __init__(self, irreps_in: o3.Irreps):
+    def __init__(
+            self,
+            irreps_in: o3.Irreps,
+            do_spin_charge_multitask: bool = False,
+            num_spins: int = 1,
+            num_charges: int = 1,
+        ):
         super().__init__()
-        self.linear = o3.Linear(irreps_in=irreps_in, irreps_out=o3.Irreps("0e"))
+        if do_spin_charge_multitask:
+            assert(num_spins >= 1)
+            assert(num_charges >= 1)   
+        self.isolate_scaler = o3.Linear(
+            irreps_in=irreps_in, irreps_out=o3.Irreps("0e")
+        )
+        
+        self.num_features = irreps_in.count("0e")
+        weights = torch.empty(
+            (num_spins * num_charges, self.num_features, 1),
+            dtype=torch.get_default_dtype(),
+        )
+        torch.nn.init.xavier_uniform_(weights)
+        self.weights = torch.nn.Parameter(weights / np.sqrt(self.num_features))
+    
+    def forward(
+        self,
+        node_feats: torch.Tensor,
+        global_attrs: torch.Tensor,  # assumes that the node attributes are one-hot encoded
+        batch: torch.Tensor,
+    ):
+        global_attrs = global_attrs[batch] # [n_spins, n_charge]
+        global_attrs = global_attrs.flatten(start_dim=-2, end_dim=-1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        return self.linear(x)  # [n_nodes, 1]
+        node_feats = self.isolate_scaler(node_feats)
+        return torch.einsum(
+            "be, ba, aek -> bk", node_feats, global_attrs, self.weights
+        )
+
+    def __repr__(self):
+        return (
+            f'{self.__class__.__name__}(shape=({", ".join(str(s) for s in self.weights.shape)}), '
+            f"weights={np.prod(self.weights.shape)})"
+        )
 
 
 @compile_mode("script")
 class NonLinearReadoutBlock(torch.nn.Module):
     def __init__(
-        self, irreps_in: o3.Irreps, MLP_irreps: o3.Irreps, gate: Optional[Callable]
+        self,
+        irreps_in: o3.Irreps,
+        MLP_irreps: o3.Irreps,
+        gate: Optional[Callable],
+        do_spin_charge_multitask: bool = False,
+        num_spins: int = 1,
+        num_charges: int = 1,
     ):
         super().__init__()
-        self.hidden_irreps = MLP_irreps
-        self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=self.hidden_irreps)
-        self.non_linearity = nn.Activation(irreps_in=self.hidden_irreps, acts=[gate])
-        self.linear_2 = o3.Linear(
-            irreps_in=self.hidden_irreps, irreps_out=o3.Irreps("0e")
+        self.hidden_size = MLP_irreps.count("0e")
+        if do_spin_charge_multitask:
+            assert(num_spins >= 1)
+            assert(num_charges >= 1)   
+        self.isolate_scaler = o3.Linear(
+            irreps_in=irreps_in, irreps_out=o3.Irreps("0e")
         )
+ 
+        linear_1 = torch.empty(
+            (num_spins*num_charges, irreps_in.count("0e"), self.hidden_size),
+            dtype=torch.get_default_dtype(),
+        )
+        torch.nn.init.xavier_uniform_(linear_1)
+        self.linear_1 = torch.nn.Parameter(
+            linear_1 / np.sqrt(irreps_in.count("0e"))
+        ) 
+        self.non_linearity = gate
+        linear_2 = torch.empty(
+            (num_spins*num_charges, self.hidden_size, 1),
+            dtype=torch.get_default_dtype(),
+        )
+        torch.nn.init.xavier_uniform_(linear_2)
+        self.linear_2 = torch.nn.Parameter(
+            linear_2 / np.sqrt(self.hidden_size)
+        ) 
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.non_linearity(self.linear_1(x))
-        return self.linear_2(x)  # [n_nodes, 1]
+    def forward(
+            self,
+            node_feats: torch.Tensor,
+            global_attrs: torch.Tensor,  # assumes that the node attributes are one-hot encoded
+            batch: torch.Tensor,
+    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+        global_attrs = global_attrs[batch] # [n_spins, n_charge]
+        global_attrs = global_attrs.flatten(start_dim=-2, end_dim=-1)
+        
+        node_feats = self.isolate_scaler(node_feats)
+        node_feats = torch.einsum("be, aek -> bak", node_feats, self.linear_1)
+        node_feats = self.non_linearity(node_feats)
+        return torch.einsum(
+            "bae, ba, aek -> bk", node_feats, global_attrs, self.linear_2
+        )  # [n_nodes, 1]
 
 
 @compile_mode("script")

@@ -39,6 +39,8 @@ from .utils import (
 class MACE(torch.nn.Module):
     def __init__(
         self,
+        spin_charge_embeddings: bool,
+        spin_charge_multitask: bool,
         r_max: float,
         num_bessel: int,
         num_polynomial_cutoff: int,
@@ -67,9 +69,16 @@ class MACE(torch.nn.Module):
         )
         # Embedding
         node_attr_irreps = o3.Irreps([(num_elements, (0, 1))])
+        node_embedding_irreps = o3.Irreps([(num_elements*num_total_charges*num_spins, (0, 1))])\
+            if spin_charge_embeddings else node_attr_irreps
         node_feats_irreps = o3.Irreps([(hidden_irreps.count(o3.Irrep(0, 1)), (0, 1))])
+        readout_weight_irreps = o3.Irreps(
+            [(num_total_charges*num_spins*hidden_irreps.count(o3.Irrep(0, 1)), (0, 1))]
+        ) if spin_charge_multitask else hidden_irreps
         self.node_embedding = LinearNodeEmbeddingBlock(
-            irreps_in=node_attr_irreps, irreps_out=node_feats_irreps
+            irreps_in=node_embedding_irreps,
+            irreps_out=node_feats_irreps,
+            do_spin_charge=spin_charge_embeddings,
         )
         self.radial_embedding = RadialEmbeddingBlock(
             r_max=r_max,
@@ -115,7 +124,12 @@ class MACE(torch.nn.Module):
         self.products = torch.nn.ModuleList([prod])
 
         self.readouts = torch.nn.ModuleList()
-        self.readouts.append(LinearReadoutBlock(hidden_irreps))
+        self.readouts.append(LinearReadoutBlock(
+            hidden_irreps,
+            spin_charge_multitask,
+            num_spins=num_spins,
+            num_charges=num_total_charges,
+        ))
 
         for i in range(num_interactions - 1):
             if i == num_interactions - 2:
@@ -144,10 +158,22 @@ class MACE(torch.nn.Module):
             self.products.append(prod)
             if i == num_interactions - 2:
                 self.readouts.append(
-                    NonLinearReadoutBlock(hidden_irreps_out, MLP_irreps, gate)
+                    NonLinearReadoutBlock(
+                        hidden_irreps_out,
+                        MLP_irreps,
+                        gate,
+                        spin_charge_multitask,
+                        num_spins=num_spins,
+                        num_charges=num_total_charges
+                    )
                 )
             else:
-                self.readouts.append(LinearReadoutBlock(hidden_irreps))
+                self.readouts.append(LinearReadoutBlock(
+                    hidden_irreps,
+                    spin_charge_multitask,
+                    num_spins=num_spins,
+                    num_charges=num_total_charges
+                ))
 
     def forward(
         self,
@@ -188,7 +214,11 @@ class MACE(torch.nn.Module):
         )  # [n_graphs,]
 
         # Embeddings
-        node_feats = self.node_embedding(data["node_attrs"])
+        node_feats = self.node_embedding(
+            data["batch"],
+            data["node_attrs"],
+            data["global_attrs"]
+        )
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=data["positions"],
             edge_index=data["edge_index"],
@@ -302,7 +332,11 @@ class ScaleShiftMACE(MACE):
         )  # [n_graphs,]
 
         # Embeddings
-        node_feats = self.node_embedding(data["node_attrs"])
+        node_feats = self.node_embedding(
+            data["batch"],
+            data["node_attrs"],
+            data["global_attrs"]
+        )
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=data["positions"],
             edge_index=data["edge_index"],
@@ -326,7 +360,13 @@ class ScaleShiftMACE(MACE):
             node_feats = product(
                 node_feats=node_feats, sc=sc, node_attrs=data["node_attrs"]
             )
-            node_es_list.append(readout(node_feats).squeeze(-1))  # {[n_nodes, ], }
+            node_es_list.append(
+                readout(
+                    node_feats,
+                    data["global_attrs"],
+                    data["batch"],
+                ).squeeze(-1)
+            )  # {[n_nodes, ], }
 
         # Sum over interactions
         node_inter_es = torch.sum(
@@ -567,6 +607,8 @@ class AtomicDipolesMACE(torch.nn.Module):
         interaction_cls_first: Type[InteractionBlock],
         num_interactions: int,
         num_elements: int,
+        num_total_charges: int,
+        num_spins: int,
         hidden_irreps: o3.Irreps,
         MLP_irreps: o3.Irreps,
         avg_num_neighbors: float,
