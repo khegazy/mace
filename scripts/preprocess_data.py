@@ -23,13 +23,26 @@ from mace.data.utils import (
     save_configurations_as_HDF5,
 )
 from mace.tools.scripts_utils import get_dataset_from_xyz, get_atomic_energies
-from mace.tools.utils import AtomicNumberTable
+from mace.tools.utils import AtomicNumberTable, TotalChargeTable, SpinTable
 from mace.tools import torch_geometric
 from mace.modules import compute_statistics
 
 
-def compute_stats_target(file: str, z_table: AtomicNumberTable, r_max: float, atomic_energies: Tuple, batch_size: int):
-    train_dataset = data.HDF5Dataset(file, z_table=z_table, r_max=r_max)
+def compute_stats_target(
+    file: str, 
+    z_table: AtomicNumberTable,
+    total_charge_table: TotalChargeTable,
+    spin_table: SpinTable,
+    r_max: float,
+    atomic_energies: Tuple, 
+    batch_size: int
+):
+    train_dataset = data.HDF5Dataset(
+        file,
+        z_table=z_table,
+        total_charge_table=total_charge_table,
+        spin_table=spin_table,
+        r_max=r_max)
     train_loader = torch_geometric.dataloader.DataLoader(
         dataset=train_dataset, 
         batch_size=batch_size, 
@@ -43,10 +56,10 @@ def compute_stats_target(file: str, z_table: AtomicNumberTable, r_max: float, at
 
 
 def pool_compute_stats(inputs: List): 
-    path_to_files, z_table, r_max, atomic_energies, batch_size, num_process = inputs
+    path_to_files, z_table, total_charge_table, spin_table, r_max, atomic_energies, batch_size, num_process = inputs
     pool = mp.Pool(processes=num_process)
     
-    re=[pool.apply_async(compute_stats_target, args=(file, z_table, r_max, atomic_energies, batch_size,)) for file in glob(path_to_files+'/*')]
+    re=[pool.apply_async(compute_stats_target, args=(file, z_table, total_charge_table, spin_table, r_max, atomic_energies, batch_size,)) for file in glob(path_to_files+'/*')]
     
     pool.close()
     pool.join()
@@ -124,6 +137,8 @@ def main():
         virials_key=args.virials_key,
         dipole_key=args.dipole_key,
         charges_key=args.charges_key,
+        total_charge_key=args.total_charge_key,
+        spin_key=args.spin_key,
     )
 
     # Atomic number table
@@ -135,11 +150,30 @@ def main():
             for config in configs
             for z in config.atomic_numbers
         )
+        total_charge_table = tools.get_total_charge_table_from_charges(
+            config.total_charge
+            for configs in (collections.train, collections.valid)
+            for config in configs
+        )
+        spin_table = tools.get_spin_table_from_spins(
+     		config.spin
+	        for configs in (collections.train, collections.valid)
+        	for config in configs
+    	)
     else:
         logging.info("Using atomic numbers from command line argument")
         zs_list = ast.literal_eval(args.atomic_numbers)
+        total_charges_list = ast.literal_eval(args.total_charges)
+        spins_list = ast.literal_eval(args.spins)
         assert isinstance(zs_list, list)
+        assert isinstance(total_charges_list, list)
+        assert isinstance(spins_list, list)
         z_table = tools.get_atomic_number_table_from_zs(zs_list)
+        total_charge_table = tools.get_total_charge_table_from_charges(total_charges_list)
+        spin_table = tools.get_spin_table_from_spins(spins_list)
+    logging.info(z_table)
+    logging.info(total_charge_table)
+    logging.info(spin_table)
 
     logging.info("Preparing training set")
     if args.shuffle:
@@ -174,7 +208,16 @@ def main():
         [atomic_energies_dict[z] for z in z_table.zs]
     )
     logging.info(f"Atomic energies: {atomic_energies.tolist()}")
-    _inputs = [args.h5_prefix+'train', z_table, args.r_max, atomic_energies, args.batch_size, args.num_process]
+    _inputs = [
+        args.h5_prefix+'train',
+        z_table,
+        total_charge_table,
+        spin_table,
+        args.r_max,
+        atomic_energies,
+        args.batch_size,
+        args.num_process
+    ]
     avg_num_neighbors, mean, std=pool_compute_stats(_inputs)
     logging.info(f"Average number of neighbors: {avg_num_neighbors}")
     logging.info(f"Mean: {mean}")

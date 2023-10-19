@@ -6,11 +6,19 @@ from mace.data.utils import Configuration
 from torch.utils.data import ConcatDataset
 from glob import glob
 from typing import List
-from mace.tools.utils import AtomicNumberTable
+from mace.tools.utils import AtomicNumberTable, TotalChargeTable, SpinTable
 
 
 class HDF5ChainDataset(ChainDataset):
-    def __init__(self, file_path, r_max, z_table, **kwargs):
+    def __init__(
+        self,
+        file_path,
+        r_max,
+        z_table,
+        total_charge_table,
+        spin_table,
+        **kwargs
+    ):
         super(HDF5ChainDataset, self).__init__()
         self.file_path = file_path
         self._file = None
@@ -18,6 +26,8 @@ class HDF5ChainDataset(ChainDataset):
         self.length = len(self.file.keys())
         self.r_max = r_max
         self.z_table = z_table
+        self.total_charge_table = total_charge_table
+        self.spin_table = spin_table
 
     @property
     def file(self):
@@ -42,13 +52,23 @@ class HDF5ChainDataset(ChainDataset):
                     iter_group=grp,
                     r_max=self.r_max,
                     z_table=self.z_table,
+                    total_charge_table=self.total_charge_table,
+                    spin_table=self.spin_table
                 )
             )
         return ChainDataset(datasets)
 
 
 class HDF5IterDataset(IterableDataset):
-    def __init__(self, iter_group, r_max, z_table, **kwargs):
+    def __init__(
+        self,
+        iter_group,
+        r_max,
+        z_table,
+        total_charge_table,
+        spin_table,
+        **kwargs
+    ):
         super(HDF5IterDataset, self).__init__()
         # it might be dangerous to open the file here
         # move opening of file to __getitem__?
@@ -56,6 +76,8 @@ class HDF5IterDataset(IterableDataset):
         self.length = len(self.iter_group.keys())
         self.r_max = r_max
         self.z_table = z_table
+        self.total_charge_table = total_charge_table
+        self.spin_table = spin_table
         # self.file = file
         # self.length = len(h5py.File(file, 'r').keys())
 
@@ -79,6 +101,8 @@ class HDF5IterDataset(IterableDataset):
                 virials=subgrp["virials"][()],
                 dipole=subgrp["dipole"][()],
                 charges=subgrp["charges"][()],
+                total_charge=subgrp["total_charge"][()],
+                spin_table=subgrp["spin_table"][()],
                 weight=subgrp["weight"][()],
                 energy_weight=subgrp["energy_weight"][()],
                 forces_weight=subgrp["forces_weight"][()],
@@ -89,7 +113,11 @@ class HDF5IterDataset(IterableDataset):
                 cell=subgrp["cell"][()],
             )
             atomic_data = data.AtomicData.from_config(
-                config, z_table=self.z_table, cutoff=self.r_max
+                config, 
+                z_table=self.z_table,
+                total_charge_table=self.total_charge_table,
+                spin_table=self.spin_table,
+                cutoff=self.r_max,
             )
             grp_list.append(atomic_data)
 
@@ -97,7 +125,15 @@ class HDF5IterDataset(IterableDataset):
 
 
 class HDF5Dataset(Dataset):
-    def __init__(self, file_path, r_max, z_table, **kwargs):
+    def __init__(
+        self,
+        file_path,
+        r_max,
+        z_table,
+        total_charge_table,
+        spin_table,
+        **kwargs
+    ):
         super(HDF5Dataset, self).__init__()
         self.file_path = file_path
         self._file = None
@@ -106,6 +142,8 @@ class HDF5Dataset(Dataset):
         self.length = len(self.file.keys()) * self.batch_size
         self.r_max = r_max
         self.z_table = z_table
+        self.total_charge_table = total_charge_table
+        self.spin_table = spin_table
         try:
             self.drop_last = bool(self.file.attrs["drop_last"])
         except KeyError:
@@ -143,6 +181,8 @@ class HDF5Dataset(Dataset):
             virials=unpack_value(subgrp["virials"][()]),
             dipole=unpack_value(subgrp["dipole"][()]),
             charges=unpack_value(subgrp["charges"][()]),
+            total_charge=unpack_value(subgrp["total_charge"][()]),
+            spin=unpack_value(subgrp["spin"][()]),
             weight=unpack_value(subgrp["weight"][()]),
             energy_weight=unpack_value(subgrp["energy_weight"][()]),
             forces_weight=unpack_value(subgrp["forces_weight"][()]),
@@ -153,15 +193,31 @@ class HDF5Dataset(Dataset):
             cell=unpack_value(subgrp["cell"][()]),
         )
         atomic_data = data.AtomicData.from_config(
-            config, z_table=self.z_table, cutoff=self.r_max
+            config,
+            z_table=self.z_table,
+            total_charge_table=self.total_charge_table,
+            spin_table=self.spin_table,
+            cutoff=self.r_max
         )
         return atomic_data
 
-def dataset_from_sharded_hdf5(files: List, z_table: AtomicNumberTable, r_max: float):
+def dataset_from_sharded_hdf5(
+    files: List,
+    z_table: AtomicNumberTable,
+    total_charge_table : TotalChargeTable,
+    spin_table : SpinTable,
+    r_max: float
+):
     files = glob(files+'/*')
     datasets = []
     for file in files:
-        datasets.append(data.HDF5Dataset(file, z_table=z_table, r_max=r_max))
+        datasets.append(data.HDF5Dataset(
+            file, 
+            z_table=z_table,
+            total_charge_table=total_charge_table,
+            spin_table=spin_table,
+            r_max=r_max
+        ))
     full_dataset = ConcatDataset(datasets)
     return full_dataset
 

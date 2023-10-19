@@ -103,6 +103,8 @@ def main() -> None:
             virials_key=args.virials_key,
             dipole_key=args.dipole_key,
             charges_key=args.charges_key,
+            total_charge_key=args.total_charge_key,
+            spin_key=args.spin_key,
         )
 
         logging.info(
@@ -122,16 +124,34 @@ def main() -> None:
             for config in configs
             for z in config.atomic_numbers
         )
+        total_charge_table = tools.get_total_charge_table_from_charges(
+            config.total_charge
+            for configs in (collections.train, collections.valid)
+            for config in configs
+        )
+        spin_table = tools.get_spin_table_from_spins(
+     		config.spin
+	        for configs in (collections.train, collections.valid)
+        	for config in configs
+    	)
     else:
         if args.statistics_file is None:
             logging.info("Using atomic numbers from command line argument")
         else:
             logging.info("Using atomic numbers from statistics file")
         zs_list = ast.literal_eval(args.atomic_numbers)
+        total_charges_list = ast.literal_eval(args.total_charges)
+        spins_list = ast.literal_eval(args.spins)
         assert isinstance(zs_list, list)
+        assert isinstance(total_charges_list, list)
+        assert isinstance(spins_list, list)
         z_table = tools.get_atomic_number_table_from_zs(zs_list)
+        total_charge_table = tools.get_total_charge_table_from_charges(total_charges_list)
+        spin_table = tools.get_spin_table_from_spins(spins_list)
     # yapf: enable
     logging.info(z_table)
+    logging.info(total_charge_table)
+    logging.info(spin_table)
 
     if atomic_energies_dict is None or len(atomic_energies_dict) == 0:
         if args.train_file.endswith(".xyz"):
@@ -168,26 +188,52 @@ def main() -> None:
 
     if args.train_file.endswith(".xyz"):
         train_set = [
-            data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+            data.AtomicData.from_config(
+                config,
+                z_table=z_table,
+                total_charge_table=total_charge_table,
+                spin_table=spin_table,
+                cutoff=args.r_max)
             for config in collections.train
         ]
         valid_set = [
-            data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+            data.AtomicData.from_config(
+                config, 
+                z_table=z_table, 
+                total_charge_table=total_charge_table,
+                spin_table=spin_table,
+                cutoff=args.r_max)
             for config in collections.valid
         ]
     elif args.train_file.endswith(".h5"):
         train_set = HDF5Dataset(
-            args.train_file, r_max=args.r_max, z_table=z_table
+            args.train_file,
+            r_max=args.r_max,
+            z_table=z_table,
+            total_charge_table=total_charge_table,
+            spin_table=spin_table
         )
         valid_set = HDF5Dataset(
-            args.valid_file, r_max=args.r_max, z_table=z_table
+            args.valid_file, 
+            r_max=args.r_max,
+            z_table=z_table,
+            total_charge_table=total_charge_table,
+            spin_table=spin_table
         )
     else: # This case would be for when the file path is to a directory of multiple .h5 files
         train_set = dataset_from_sharded_hdf5(
-            args.train_file, r_max=args.r_max, z_table=z_table
+            args.train_file,
+            r_max=args.r_max,
+            z_table=z_table,
+            total_charge_table=total_charge_table,
+            spin_table=spin_table
         )
         valid_set = dataset_from_sharded_hdf5(
-            args.valid_file, r_max=args.r_max, z_table=z_table
+            args.valid_file,
+            r_max=args.r_max,
+            z_table=z_table,
+            total_charge_table=total_charge_table,
+            spin_table=spin_table
         )
         
     train_sampler, valid_sampler = None, None
@@ -592,18 +638,35 @@ def main() -> None:
     if args.train_file.endswith(".xyz"):
         for name, subset in collections.tests:
             test_sets[name] = [
-                data.AtomicData.from_config(config, z_table=z_table, cutoff=args.r_max)
+                data.AtomicData.from_config(
+                    config, 
+                    z_table=z_table, 
+                    total_charge_table=total_charge_table,
+                    spin_table=spin_table,
+                    cutoff=args.r_max)
                 for config in subset
             ]
     elif not args.multi_processed_test:
         test_files = get_files_with_suffix(args.test_dir, "_test.h5")
         for test_file in test_files:
             name = os.path.splitext(os.path.basename(test_file))[0]
-            test_sets[name] = HDF5Dataset(test_file, r_max=args.r_max, z_table=z_table)
+            test_sets[name] = HDF5Dataset(
+                test_file,
+                r_max=args.r_max,
+                z_table=z_table,
+                total_charge_table=total_charge_table,
+                spin_table=spin_table
+            )
     else:
         test_folders = glob(args.test_dir + "/*")
         for folder in test_folders:
-            test_sets[name] = dataset_from_sharded_hdf5(folder, r_max=args.r_max, z_table=z_table)
+            test_sets[name] = dataset_from_sharded_hdf5(
+                folder,
+                r_max=args.r_max,
+                z_table=z_table,
+                total_charge_table=total_charge_table,
+                spin_table=spin_table
+            )
             
     for test_name, test_set in test_sets.items():
         test_sampler = None

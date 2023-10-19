@@ -310,6 +310,8 @@ def save_dataset_as_HDF5(dataset: List, out_name: str) -> None:
             grp["virials"] = data.virials
             grp["dipole"] = data.dipole
             grp["charges"] = data.charges
+            grp["total_charge"] = data.total_charge
+            grp["spin"] = data.spin
 
 
 def save_AtomicData_to_HDF5(data, i, h5_file) -> None:
@@ -332,6 +334,8 @@ def save_AtomicData_to_HDF5(data, i, h5_file) -> None:
     grp["virials"] = data.virials
     grp["dipole"] = data.dipole
     grp["charges"] = data.charges
+    grp["total_charge"] = data.total_charge
+    grp["spin"] = data.spin
 
 
 def save_configurations_as_HDF5(configurations: Configurations, i, h5_file) -> None:
@@ -347,6 +351,8 @@ def save_configurations_as_HDF5(configurations: Configurations, i, h5_file) -> N
         subgroup["virials"] = write_value(config.virials)
         subgroup["dipole"] = write_value(config.dipole)
         subgroup["charges"] = write_value(config.charges)
+        subgroup["total_charge"] = write_value(config.total_charge)
+        subgroup["spin"] = write_value(config.spin)
         subgroup["cell"] = write_value(config.cell)
         subgroup["pbc"] = write_value(config.pbc)
         subgroup["weight"] = write_value(config.weight)

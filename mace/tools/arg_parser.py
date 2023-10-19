@@ -258,6 +258,21 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         required=False,
     )
     parser.add_argument(
+        "--total_charges",
+        help="List total molecular charges",
+        type=str,
+        default=None,
+        required=False,
+    )
+    parser.add_argument(
+        "--spins",
+        help="List of molecular spins",
+        type=str,
+        default=None,
+        required=False,
+    )
+
+    parser.add_argument(
         "--mean",
         help="Mean energy per atom of training set",
         type=float,
@@ -637,8 +652,34 @@ def build_preprocess_arg_parser() -> argparse.ArgumentParser:
         default="charges",
     )
     parser.add_argument(
+        "--total_charge_key",
+        help="Key of molecular charge in training xyz",
+        type=str,
+        default="charge",
+    )
+    parser.add_argument(
+        "--spin_key",
+        help="Key of molecular spin in training xyz",
+        type=str,
+        default="spin",
+    )
+    parser.add_argument(
         "--atomic_numbers",
         help="List of atomic numbers",
+        type=str,
+        default=None,
+        required=False,
+    )
+    parser.add_argument(
+        "--total_charges",
+        help="List total molecular charges",
+        type=str,
+        default=None,
+        required=False,
+    )
+    parser.add_argument(
+        "--spins",
+        help="List of molecular spins",
         type=str,
         default=None,
         required=False,
