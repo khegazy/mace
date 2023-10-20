@@ -61,11 +61,12 @@ class LinearReadoutBlock(torch.nn.Module):
         if do_spin_charge_multitask:
             assert(num_spins >= 1)
             assert(num_charges >= 1)   
-        self.isolate_scaler = o3.Linear(
-            irreps_in=irreps_in, irreps_out=o3.Irreps("0e")
-        )
-        
         self.num_features = irreps_in.count("0e")
+        self.isolate_scaler = o3.Linear(
+            irreps_in=irreps_in, irreps_out=o3.Irreps(
+                f"{self.num_features}x0e"
+        ))
+        
         weights = torch.empty(
             (num_spins * num_charges, self.num_features, 1),
             dtype=torch.get_default_dtype(),
@@ -106,21 +107,23 @@ class NonLinearReadoutBlock(torch.nn.Module):
         num_charges: int = 1,
     ):
         super().__init__()
-        self.hidden_size = MLP_irreps.count("0e")
         if do_spin_charge_multitask:
             assert(num_spins >= 1)
             assert(num_charges >= 1)   
+        self.hidden_size = MLP_irreps.count("0e")
+        self.num_features = irreps_in.count("0e")
         self.isolate_scaler = o3.Linear(
-            irreps_in=irreps_in, irreps_out=o3.Irreps("0e")
-        )
+            irreps_in=irreps_in, irreps_out=o3.Irreps(
+                f"{self.num_features}x0e"
+        ))
  
         linear_1 = torch.empty(
-            (num_spins*num_charges, irreps_in.count("0e"), self.hidden_size),
+            (num_spins*num_charges, self.num_features, self.hidden_size),
             dtype=torch.get_default_dtype(),
         )
         torch.nn.init.xavier_uniform_(linear_1)
         self.linear_1 = torch.nn.Parameter(
-            linear_1 / np.sqrt(irreps_in.count("0e"))
+            linear_1 / np.sqrt(self.num_features)
         ) 
         self.non_linearity = gate
         linear_2 = torch.empty(
