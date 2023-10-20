@@ -91,6 +91,18 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         ],
     )
     parser.add_argument(
+        "--spin_charge_embeddings",
+        help="Use embeddings that account for total charge and spin",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--spin_charge_multitask",
+        help="Use individual prediction heads for each total charge and spin",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--r_max", help="distance cutoff (in Ang)", 
         type=float, 
         default=5.0
