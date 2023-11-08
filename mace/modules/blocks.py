@@ -57,22 +57,31 @@ class LinearReadoutBlock(torch.nn.Module):
             num_spins: int = 1,
             num_charges: int = 1,
         ):
-        super().__init__()
-        if do_spin_charge_multitask:
-            assert(num_spins >= 1)
-            assert(num_charges >= 1)   
+        super().__init__()       
         self.num_features = irreps_in.count("0e")
         self.isolate_scaler = o3.Linear(
             irreps_in=irreps_in, irreps_out=o3.Irreps(
                 f"{self.num_features}x0e"
         ))
-        
-        weights = torch.empty(
-            (num_spins * num_charges, self.num_features, 1),
-            dtype=torch.get_default_dtype(),
-        )
-        torch.nn.init.xavier_uniform_(weights)
-        self.weights = torch.nn.Parameter(weights / np.sqrt(self.num_features))
+        self.do_spin_charge_multitask = do_spin_charge_multitask
+        if self.do_spin_charge_multitask:
+            assert(num_spins >= 1)
+            assert(num_charges >= 1)   
+            assert(num_spins > 1 or num_charges > 1) 
+       
+            weights = torch.empty(
+                (num_spins*num_charges, self.num_features, 1),
+                dtype=torch.get_default_dtype(),
+            )
+        else: 
+            weights = torch.empty(
+                (self.num_features, 1),
+                dtype=torch.get_default_dtype(),
+            )
+        #torch.nn.init.xavier_uniform_(weights)
+        var = np.sqrt(6)/np.sqrt(self.num_features + 1)
+        weights = torch.nn.init._no_grad_uniform_(weights, -1*var, var)
+        self.weights = torch.nn.Parameter(weights)
     
     def forward(
         self,
@@ -84,9 +93,12 @@ class LinearReadoutBlock(torch.nn.Module):
         global_attrs = global_attrs.flatten(start_dim=-2, end_dim=-1)
 
         node_feats = self.isolate_scaler(node_feats)
-        return torch.einsum(
-            "be, ba, aek -> bk", node_feats, global_attrs, self.weights
-        )
+        if self.do_spin_charge_multitask:
+            return torch.einsum(
+                "be, ba, aek -> bk", node_feats, global_attrs, self.weights
+            )
+        else:
+            return torch.einsum("be, ek -> bk", node_feats, self.weights)
 
     def __repr__(self):
         return (
@@ -107,33 +119,48 @@ class NonLinearReadoutBlock(torch.nn.Module):
         num_charges: int = 1,
     ):
         super().__init__()
-        if do_spin_charge_multitask:
-            assert(num_spins >= 1)
-            assert(num_charges >= 1)   
+        self.do_spin_charge_multitask = do_spin_charge_multitask
         self.hidden_size = MLP_irreps.count("0e")
         self.num_features = irreps_in.count("0e")
         self.isolate_scaler = o3.Linear(
             irreps_in=irreps_in, irreps_out=o3.Irreps(
                 f"{self.num_features}x0e"
         ))
+
+        if do_spin_charge_multitask:
+            assert(num_spins >= 1)
+            assert(num_charges >= 1)
+            assert(num_spins > 1 or num_charges > 1) 
  
-        linear_1 = torch.empty(
-            (num_spins*num_charges, self.num_features, self.hidden_size),
-            dtype=torch.get_default_dtype(),
-        )
-        torch.nn.init.xavier_uniform_(linear_1)
-        self.linear_1 = torch.nn.Parameter(
-            linear_1 / np.sqrt(self.num_features)
-        ) 
+            linear_1 = torch.empty(
+                (num_spins*num_charges, self.num_features, self.hidden_size),
+                dtype=torch.get_default_dtype(),
+            )
+            linear_2 = torch.empty(
+                (num_spins*num_charges, self.hidden_size, 1),
+                dtype=torch.get_default_dtype(),
+            )
+        else:
+            linear_1 = torch.empty(
+                (self.num_features, self.hidden_size),
+                dtype=torch.get_default_dtype(),
+            )
+            linear_2 = torch.empty(
+                (self.hidden_size, 1),
+                dtype=torch.get_default_dtype(),
+            )
+
+
+        #torch.nn.init.xavier_uniform_(linear_1)
+        var_1 = np.sqrt(6)/np.sqrt(self.num_features + self.hidden_size)
+        linear_1 = torch.nn.init._no_grad_uniform_(linear_1, -1*var_1, var_1)
+        self.linear_1 = torch.nn.Parameter(linear_1)
         self.non_linearity = gate
-        linear_2 = torch.empty(
-            (num_spins*num_charges, self.hidden_size, 1),
-            dtype=torch.get_default_dtype(),
-        )
-        torch.nn.init.xavier_uniform_(linear_2)
-        self.linear_2 = torch.nn.Parameter(
-            linear_2 / np.sqrt(self.hidden_size)
-        ) 
+        #torch.nn.init.xavier_uniform_(linear_2)
+        var_2 = np.sqrt(6)/np.sqrt(self.hidden_size + 1)
+        linear_2 = torch.nn.init._no_grad_uniform_(linear_2, -1*var_2, var_2)
+        linear_2 /= np.sqrt(self.hidden_size)
+        self.linear_2 = torch.nn.Parameter(linear_2) 
 
     def forward(
             self,
@@ -141,15 +168,23 @@ class NonLinearReadoutBlock(torch.nn.Module):
             global_attrs: torch.Tensor,  # assumes that the node attributes are one-hot encoded
             batch: torch.Tensor,
     ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        global_attrs = global_attrs[batch] # [n_spins, n_charge]
-        global_attrs = global_attrs.flatten(start_dim=-2, end_dim=-1)
         
         node_feats = self.isolate_scaler(node_feats)
-        node_feats = torch.einsum("be, aek -> bak", node_feats, self.linear_1)
+        if self.do_spin_charge_multitask:
+            global_attrs = global_attrs[batch] # [n_spins, n_charge]
+            global_attrs = global_attrs.flatten(start_dim=-2, end_dim=-1)
+            node_feats = torch.einsum("be, ba, aek -> bk", node_feats, global_attrs, self.linear_1)
+        else:
+            node_feats = torch.einsum("be, ek -> bk", node_feats, self.linear_1)
         node_feats = self.non_linearity(node_feats)
-        return torch.einsum(
-            "bae, ba, aek -> bk", node_feats, global_attrs, self.linear_2
-        )  # [n_nodes, 1]
+        if self.do_spin_charge_multitask:
+            return torch.einsum(
+                "be, ba, aek -> bk", node_feats, global_attrs, self.linear_2
+            )  # [n_nodes, 1]
+        else:
+            return torch.einsum(
+                "be, ek -> bk", node_feats, self.linear_2
+            )  # [n_nodes, 1]
 
 
 @compile_mode("script")
