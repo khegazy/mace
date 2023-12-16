@@ -52,7 +52,7 @@ def main() -> None:
         torch.distributed.init_process_group(backend='nccl')
     else:
         rank = int(0)
-        
+    
     # Setup
     tools.set_seeds(args.seed)
     tools.setup_logger(level=args.log_level, tag=tag, directory=args.log_dir, rank=rank)
