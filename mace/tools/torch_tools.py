@@ -115,10 +115,12 @@ def voigt_to_matrix(t: torch.Tensor):
     )
 
 
-def init_wandb(project: str, entity: str, name: str, config: dict):
+def init_wandb(project: str, entity: str, name: str, config: dict, dir: str="./", tags=[], resume: bool=False):
     import wandb
 
-    wandb.init(project=project, entity=entity, name=name, config=config)
+    wandb.init(
+        project=project, entity=entity, name=name, config=config, tags=tags, resume=resume, dir=dir
+    )
 
 
 class DataParallelModel(torch.nn.Module):

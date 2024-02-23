@@ -86,7 +86,7 @@ class LinearReadoutBlock(torch.nn.Module):
     def forward(
         self,
         node_feats: torch.Tensor,
-        global_attrs: torch.Tensor,  # assumes that the node attributes are one-hot encoded
+        global_attrs: torch.Tensor,  # node attributes are one-hot encoded
         batch: torch.Tensor,
     ):
         global_attrs = global_attrs[batch] # [n_spins, n_charge]
@@ -165,7 +165,7 @@ class NonLinearReadoutBlock(torch.nn.Module):
     def forward(
             self,
             node_feats: torch.Tensor,
-            global_attrs: torch.Tensor,  # assumes that the node attributes are one-hot encoded
+            global_attrs: torch.Tensor,  # node attributes are one-hot encoded
             batch: torch.Tensor,
     ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         
@@ -173,9 +173,13 @@ class NonLinearReadoutBlock(torch.nn.Module):
         if self.do_spin_charge_multitask:
             global_attrs = global_attrs[batch] # [n_spins, n_charge]
             global_attrs = global_attrs.flatten(start_dim=-2, end_dim=-1)
-            node_feats = torch.einsum("be, ba, aek -> bk", node_feats, global_attrs, self.linear_1)
+            node_feats = torch.einsum(
+                "be, ba, aek -> bk", node_feats, global_attrs, self.linear_1
+            )
         else:
-            node_feats = torch.einsum("be, ek -> bk", node_feats, self.linear_1)
+            node_feats = torch.einsum(
+                "be, ek -> bk", node_feats, self.linear_1
+            )
         node_feats = self.non_linearity(node_feats)
         if self.do_spin_charge_multitask:
             return torch.einsum(
