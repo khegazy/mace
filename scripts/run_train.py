@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 import json
 import os
+import sys
 
 import numpy as np
 import torch.nn.functional
@@ -38,6 +39,8 @@ from mace.data import HDF5Dataset, dataset_from_sharded_hdf5
 def main() -> None:
     args = tools.build_default_arg_parser().parse_args()
     tag = tools.get_tag(name=args.name, seed=args.seed)
+    
+    # Setup
     if args.distributed:
         try:
             distr_env = DistributedEnvironment()
@@ -52,8 +55,7 @@ def main() -> None:
         torch.distributed.init_process_group(backend='nccl')
     else:
         rank = int(0)
-    
-    # Setup
+
     tools.set_seeds(args.seed)
     tools.setup_logger(level=args.log_level, tag=tag, directory=args.log_dir, rank=rank)
     
@@ -548,6 +550,11 @@ def main() -> None:
             loss_fn=loss_fn_energy,
         )
 
+    if not os.path.exists(args.checkpoints_dir) and rank == 0:
+        os.makedirs(args.checkpoints_dir)
+    if args.distributed:
+        torch.distributed.barrier()
+
     checkpoint_handler = tools.CheckpointHandler(
         directory=args.checkpoints_dir,
         tag=tag,
@@ -569,6 +576,10 @@ def main() -> None:
                 swa=False,
                 device=device,
             )
+        if args.swa:
+            for group in optimizer.param_groups:
+                if 'swa_lr' not in group:
+                    group['swa_lr'] = args.swa_lr
         if opt_start_epoch is not None:
             start_epoch = opt_start_epoch
 
@@ -580,6 +591,7 @@ def main() -> None:
     logging.info(f"Number of parameters: {tools.count_parameters(model)}")
     logging.info(f"Optimizer: {optimizer}")
 
+    args.wandb = args.wandb and rank == 0
     if args.wandb:
         logging.info("Using Weights and Biases for logging")
         import wandb
@@ -589,11 +601,28 @@ def main() -> None:
         args_dict_json = json.dumps(args_dict)
         for key in args.wandb_log_hypers:
             wandb_config[key] = args_dict[key]
+        tags = []
+        if args.swa:
+            tags.append("swa")
+        if args.spin_charge_embeddings:
+            tags.append("spin_charge_embedding")
+        if args.spin_charge_multitask:
+            tags.append("spin_charge_multitask")
+        str_idx = args.checkpoints_dir.find("chunk")
+        if str_idx != -1:
+            tags.append(
+                args.checkpoints_dir[str_idx:args.checkpoints_dir.find("_", str_idx)]
+            )
+        else:
+            tags.append("full_data")
         tools.init_wandb(
             project=args.wandb_project,
             entity=args.wandb_entity,
             name=args.wandb_name,
+            tags = tags,
             config=wandb_config,
+            resume=True,
+            dir=args.checkpoints_dir,
         )
         wandb.run.summary["params"] = args_dict_json
 
@@ -659,7 +688,11 @@ def main() -> None:
                 spin_table=spin_table
             )
     else:
-        test_folders = glob(args.test_dir + "/*")
+        if args.test_dir is None and args.test_file is not None:
+            test_folders = [args.test_file]
+        else:
+            test_folders = glob(args.test_dir + "/*")
+        print("HERE TEST FOLDERS", test_folders)
         for folder in test_folders:
             test_sets[name] = dataset_from_sharded_hdf5(
                 folder,
@@ -668,7 +701,7 @@ def main() -> None:
                 total_charge_table=total_charge_table,
                 spin_table=spin_table
             )
-            
+     
     for test_name, test_set in test_sets.items():
         test_sampler = None
         if args.distributed:
