@@ -101,7 +101,7 @@ def train(
         if distributed:
             train_sampler.set_epoch(epoch)
         
-        train_one_epoch(
+        train_loss = train_one_epoch(
             model=model,
             loss_fn=loss_fn,
             data_loader=train_loader,
@@ -194,6 +194,7 @@ def train(
                 if log_wandb:
                     wandb_log_dict = {
                         "epoch": epoch,
+                        "train_ema_loss" : train_loss,
                         "valid_loss": valid_loss,
                         "valid_rmse_e": eval_metrics["rmse_e"],
                         "valid_rmse_e_per_atom": eval_metrics["rmse_e_per_atom"],
@@ -202,7 +203,7 @@ def train(
                         "valid_mae_e_per_atom" : eval_metrics["mae_e_per_atom"],
                         "valid_mae_f" : eval_metrics["mae_f"],
                     }
-                    wandb.log(wandb_log_dict)
+                    wandb.log(wandb_log_dict, step=epoch)
                 if valid_loss >= lowest_loss:
                     patience_counter += 1
                     if patience_counter >= patience and epoch < swa.start:
@@ -253,10 +254,11 @@ def train_one_epoch(
     device: torch.device,
     distributed_model: Optional[DistributedDataParallel] = None,
     rank: Optional[int] = 0,
-) -> None:
+) -> float:
+    ema_loss = None
     model_to_train = model if distributed_model is None else distributed_model
     for batch in data_loader:
-        _, opt_metrics = take_step(
+        loss, opt_metrics = take_step(
             model=model_to_train,
             loss_fn=loss_fn,
             batch=batch,
@@ -268,8 +270,13 @@ def train_one_epoch(
         )
         opt_metrics["mode"] = "opt"
         opt_metrics["epoch"] = epoch
+        if ema_loss is None:
+            ema_loss = loss.item()
+        else:
+            ema_loss = 0.05*loss.item() + 0.95*ema_loss
         if rank == 0:
             logger.log(opt_metrics)
+    return ema_loss
 
 
 def take_step(
