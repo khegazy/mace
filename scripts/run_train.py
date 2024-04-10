@@ -717,7 +717,7 @@ def main() -> None:
             test_set,
             batch_size=args.valid_batch_size,
             shuffle=(test_sampler is None),
-            drop_last=test_set.drop_last,
+            drop_last=False,
             num_workers=args.num_workers,
             pin_memory=args.pin_memory,
         )
