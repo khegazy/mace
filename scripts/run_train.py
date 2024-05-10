@@ -663,7 +663,7 @@ def main() -> None:
         "train": train_loader,
         "valid": valid_loader,
     }
-    
+
     test_sets = {}
     if args.train_file.endswith(".xyz"):
         for name, subset in collections.tests:
@@ -692,8 +692,8 @@ def main() -> None:
             test_folders = [args.test_file]
         else:
             test_folders = glob(args.test_dir + "/*")
-        print("HERE TEST FOLDERS", test_folders)
         for folder in test_folders:
+            name = os.path.basename(os.path.normpath(folder))
             test_sets[name] = dataset_from_sharded_hdf5(
                 folder,
                 r_max=args.r_max,
@@ -722,7 +722,7 @@ def main() -> None:
             pin_memory=args.pin_memory,
         )
         all_data_loaders[test_name] = test_loader
-                        
+
     for swa_eval in swas:
         epoch = checkpoint_handler.load_latest(
             state=tools.CheckpointState(model, optimizer, lr_scheduler),

@@ -139,7 +139,8 @@ def train(
                     error_e = eval_metrics["rmse_e_per_atom"] * 1e3
                     error_f = eval_metrics["rmse_f"] * 1e3
                     logging.info(
-                        f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
+                        f"Epoch {epoch}: loss={valid_loss}, RMSE_E_per_atom={error_e} meV, RMSE_F={error_f} meV / A"
+                        #f"Epoch {epoch}: loss={valid_loss:.4f}, RMSE_E_per_atom={error_e:.1f} meV, RMSE_F={error_f:.1f} meV / A"
                     )
                 elif (
                     log_errors == "PerAtomRMSEstressvirials"
@@ -276,6 +277,8 @@ def train_one_epoch(
             ema_loss = 0.05*loss.item() + 0.95*ema_loss
         if rank == 0:
             logger.log(opt_metrics)
+        #print("DEBUG BREAKING IN TRAIN")
+        #break
     return ema_loss
 
 
@@ -342,6 +345,8 @@ def evaluate(
             compute_stress=output_args["stress"],
         )
         avg_loss, aux = metrics(batch, output)
+        #print("DEBUG BREAKING OUT OF EVAL")
+        #break
 
     avg_loss, aux = metrics.compute()
     aux["time"] = time.time() - start_time

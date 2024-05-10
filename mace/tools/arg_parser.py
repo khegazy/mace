@@ -246,9 +246,8 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--multi_processed_test",
         help="Boolean value for whether the test data was multiprocessed",
-        type=bool,
         default=False,
-        required=False,
+        action="store_true",
     )
     parser.add_argument(
         "--num_workers",
