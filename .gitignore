@@ -29,19 +29,19 @@ logs/MACE_run-5.log
 checkpoints/
 
 # wandb
-wandb/
+wandb*
 
 # h5 data files
 h5*
 
 # SLURM
-*slurm*
+slurm_logs*
 
 # Logs
 *logs*
 
 # Run Scripts
-run_scripts/
+#run_scripts/
 
 *.model
-results/*
+results*
