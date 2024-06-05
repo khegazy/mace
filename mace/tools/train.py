@@ -277,8 +277,6 @@ def train_one_epoch(
             ema_loss = 0.05*loss.item() + 0.95*ema_loss
         if rank == 0:
             logger.log(opt_metrics)
-        #print("DEBUG BREAKING IN TRAIN")
-        #break
     return ema_loss
 
 
@@ -345,8 +343,6 @@ def evaluate(
             compute_stress=output_args["stress"],
         )
         avg_loss, aux = metrics(batch, output)
-        #print("DEBUG BREAKING OUT OF EVAL")
-        #break
 
     avg_loss, aux = metrics.compute()
     aux["time"] = time.time() - start_time
