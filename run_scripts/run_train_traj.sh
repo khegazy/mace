@@ -15,6 +15,11 @@ echo "GPU "${GPUS}" / model size "${CHANNELS}" / data "${DATA}" / spin_charge "$
 NAME="MACE"${LABEL}"_"${CHANNELS}"_"${L}"_"${DATA}"-"${SUBSET}"_bs"${BS_LABEL}"_s"${SEED}
 pscratch="/pscratch/sd/k/khegazy/"
 
+if [[ ${SUBSET} =~ "chunk" ]]; then
+    SUBSET_EVAL="full"
+else
+    SUBSET_EVAL=${SUBSET}
+fi
 
 
 #torchrun --standalone --nnodes 1 --nproc_per_node 4 ./scripts/run_train.py ${SPIN_CHARGE} \
@@ -37,8 +42,8 @@ python3 ./scripts/run_train.py ${SPIN_CHARGE} \
     --swa_forces_weight=100 \
     --r_max=5.0 \
     --train_file="${pscratch}datasets/molecular/radQM9/"${DATA}"/"${SUBSET}"/train" \
-    --valid_file="${pscratch}datasets/molecular/radQM9/"${DATA}"/"${SUBSET}"/val" \
-    --test_file="${pscratch}/datasets/molecular/radQM9/"${DATA}"/"${SUBSET}"/test" \
+    --valid_file="${pscratch}datasets/molecular/radQM9/"${DATA}"/"${SUBSET_EVAL}"/val" \
+    --test_file="${pscratch}/datasets/molecular/radQM9/"${DATA}"/"${SUBSET_EVAL}"/test" \
     --statistics_file="${pscratch}/datasets/molecular/radQM9/"${DATA}"/"${SUBSET}"/statistics.json" \
     --multi_processed_test \
     --atomic_numbers="[1, 6, 7, 8, 9]" \
